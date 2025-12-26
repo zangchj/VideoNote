@@ -121,7 +121,8 @@ sudo apt install ffmpeg
 
 ## 🔎代码参考
 - 本项目中的 `抖音下载功能` 部分代码参考引用自：[Evil0ctal/Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API)
-
+- 本项目中代码参考 https://github.com/JefferyHcool/BiliNote
+- 新增本地视频支持多选
 ## 📜 License
 
 MIT License
