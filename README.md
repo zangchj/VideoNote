@@ -1,6 +1,9 @@
 <p align="center"><i>AI 视频笔记生成工具 让 AI 为你的视频做笔记</i></p>
 
-
+## 🔎代码参考
+- 本项目中的 `抖音下载功能` 部分代码参考引用自：[Evil0ctal/Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API)
+- 本项目中代码参考 https://github.com/JefferyHcool/BiliNote
+- 新增本地视频支持多选
 
 ## ✨ 项目简介
 
@@ -10,8 +13,6 @@ BiliNote 是一个开源的 AI 视频笔记助手，支持通过哔哩哔哩、Y
 
 ## 体验地址
 可以通过访问 [这里](https://www.bilinote.app/) 进行体验，速度略慢，不支持长视频。
-## 📦 Windows 打包版
-本项目提供了 Windows 系统的 exe 文件，可在[release](https://github.com/JefferyHcool/BiliNote/releases/tag/v1.1.1)进行下载。**注意一定要在没有中文路径的环境下运行。**
 
 
 ## 🔧 功能特性
@@ -41,7 +42,7 @@ BiliNote 是一个开源的 AI 视频笔记助手，支持通过哔哩哔哩、Y
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/JefferyHcool/BiliNote.git
+git clone https://github.com/zangchj/VideoNote
 cd BiliNote
 mv .env.example .env
 ```
@@ -101,10 +102,7 @@ sudo apt install ffmpeg
 
 
 
-## 🔎代码参考
-- 本项目中的 `抖音下载功能` 部分代码参考引用自：[Evil0ctal/Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API)
-- 本项目中代码参考 https://github.com/JefferyHcool/BiliNote
-- 新增本地视频支持多选
+
 ## 📜 License
 
 MIT License
