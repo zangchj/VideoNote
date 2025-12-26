@@ -1,10 +1,7 @@
 import { useTaskStore } from '@/store/taskStore'
-import { ScrollArea } from '@/components/ui/scroll-area.tsx'
-import { Badge } from '@/components/ui/badge.tsx'
 import { cn } from '@/lib/utils.ts'
 import { Trash } from 'lucide-react'
 import { Button } from '@/components/ui/button.tsx'
-import PinyinMatch from 'pinyin-match'
 import Fuse from 'fuse.js'
 
 import {
@@ -34,7 +31,7 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
   })
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (rawSearch === '') return
+      // 当 rawSearch 为空时仍然把 search 置空，确保防抖行为一致
       setSearch(rawSearch)
     }, 300) // 300ms 防抖
 
@@ -51,8 +48,8 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
                 type="text"
                 placeholder="搜索笔记标题..."
                 className="w-full rounded border border-neutral-300 px-3 py-1 text-sm outline-none focus:border-primary"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
+                value={rawSearch}
+                onChange={e => setRawSearch(e.target.value)}
             />
           </div>
           <div className="rounded-md border border-neutral-200 bg-neutral-50 py-6 text-center">
@@ -71,8 +68,8 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
             type="text"
             placeholder="搜索笔记标题..."
             className="w-full rounded border border-neutral-300 px-3 py-1 text-sm outline-none focus:border-primary"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
+            value={rawSearch}
+            onChange={e => setRawSearch(e.target.value)}
         />
       </div>
       <div className="flex flex-col gap-2 overflow-hidden">
@@ -89,7 +86,8 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
               className={cn('flex items-center gap-4')}
             >
               {/* 封面图 */}
-              {task.platform === 'local' ? (
+              {/* task may not have 'platform' on the Task type, use a safe access */}
+              {((task as any).platform === 'local') ? (
                 <img
                   src={
                     task.audioMeta.cover_url ? `${task.audioMeta.cover_url}` : '/placeholder.png'
@@ -128,21 +126,12 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
             </div>
             <div className={'mt-2 flex items-center justify-between text-[10px]'}>
               <div className="shrink-0">
-                {task.status === 'SUCCESS' && (
-                  <div className={'bg-primary w-10 rounded p-0.5 text-center text-white'}>
-                    已完成
-                  </div>
-                )}
-                {task.status !== 'SUCCESS' && task.status !== 'FAILED' ? (
-                  <div className={'w-10 rounded bg-green-500 p-0.5 text-center text-white'}>
-                    等待中
-                  </div>
-                ) : (
-                  <></>
-                )}
-                {task.status === 'FAILED' && (
-                  <div className={'w-10 rounded bg-red-500 p-0.5 text-center text-white'}>失败</div>
-                )}
+                {(() => {
+                  const status = String((task as any).status || '')
+                  if (status === 'SUCCESS') return <div className={'bg-primary w-10 rounded p-0.5 text-center text-white'}>已完成</div>
+                  if (status === 'FAILED') return <div className={'w-10 rounded bg-red-500 p-0.5 text-center text-white'}>失败</div>
+                  return <div className={'w-10 rounded bg-green-500 p-0.5 text-center text-white'}>等待中</div>
+                })()}
               </div>
 
               <div>
@@ -151,7 +140,7 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
                     <TooltipTrigger asChild>
                       <Button
                         type="button"
-                        size="small"
+                        size="sm"
                         variant="ghost"
                         onClick={e => {
                           e.stopPropagation()
@@ -168,13 +157,6 @@ const NoteHistory: FC<NoteHistoryProps> = ({ onSelect, selectedId }) => {
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              {/*<div className="shrink-0">*/}
-              {/*  {task.status === 'SUCCESS' && <Badge variant="default">已完成</Badge>}*/}
-              {/*  {task.status !== 'SUCCESS' && task.status === 'FAILED' && (*/}
-              {/*    <Badge variant="outline">等待中</Badge>*/}
-              {/*  )}*/}
-              {/*  {task.status === 'FAILED' && <Badge variant="destructive">失败</Badge>}*/}
-              {/*</div>*/}
             </div>
           </div>
         ))}

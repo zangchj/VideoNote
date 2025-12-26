@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import toast from 'react-hot-toast'
 
 
-export type TaskStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILD'
+export type TaskStatus = 'PENDING' | 'RUNNING' | 'SUCCESS' | 'FAILED'
 
 export interface AudioMeta {
   cover_url: string
@@ -43,28 +43,38 @@ export interface Task {
   transcript: Transcript
   status: TaskStatus
   audioMeta: AudioMeta
+  // store top-level platform for convenience (used in some places)
+  platform?: string
   createdAt: string
   formData: {
-    video_url: string
+    video_url?: string
     link: undefined | boolean
     screenshot: undefined | boolean
-    platform: string
-    quality: string
-    model_name: string
-    provider_id: string
+    platform?: string
+    quality?: string
+    model_name?: string
+    provider_id?: string
+    // optional fields used elsewhere
+    style?: string
+    extras?: string
+    video_understanding?: boolean
+    video_interval?: number
+    grid_size?: any
+    format?: any[]
   }
 }
 
 interface TaskStore {
   tasks: Task[]
   currentTaskId: string | null
-  addPendingTask: (taskId: string, platform: string) => void
+  addPendingTask: (taskId: string, platform: string, formData?: any) => void
   updateTaskContent: (id: string, data: Partial<Omit<Task, 'id' | 'createdAt'>>) => void
   removeTask: (id: string) => void
   clearTasks: () => void
   setCurrentTask: (taskId: string | null) => void
   getCurrentTask: () => Task | null
   retryTask: (id: string) => void
+  normalizeTitles: () => void
 }
 
 export const useTaskStore = create<TaskStore>()(
@@ -74,36 +84,54 @@ export const useTaskStore = create<TaskStore>()(
       currentTaskId: null,
 
       addPendingTask: (taskId: string, platform: string, formData: any) =>
+        set(state => {
+          // derive a reasonable title: prefer provided video_url filename, then explicit title, then model_name
+          let title = ''
+          if (formData) {
+            if (formData.video_url) {
+              try {
+                const u = String(formData.video_url)
+                let name = u.split('/').pop() || u
+                // strip extension if exists
+                name = name.replace(/\.[^.]+$/, '')
+                title = name
+              } catch (e) {
+                title = String(formData.video_url)
+              }
+            }
+            if (!title) title = formData.title || formData.model_name || ''
+          }
 
-        set(state => ({
-          tasks: [
-            {
-              formData: formData,
-              id: taskId,
-              status: 'PENDING',
-              markdown: '',
-              platform: platform,
-              transcript: {
-                full_text: '',
-                language: '',
-                raw: null,
-                segments: [],
+          return {
+            tasks: [
+              {
+                formData: formData,
+                id: taskId,
+                status: 'PENDING',
+                markdown: '',
+                platform: platform,
+                transcript: {
+                  full_text: '',
+                  language: '',
+                  raw: null,
+                  segments: [],
+                },
+                createdAt: new Date().toISOString(),
+                audioMeta: {
+                  cover_url: '',
+                  duration: 0,
+                  file_path: '',
+                  platform: '',
+                  raw_info: null,
+                  title: title || '未命名笔记',
+                  video_id: '',
+                },
               },
-              createdAt: new Date().toISOString(),
-              audioMeta: {
-                cover_url: '',
-                duration: 0,
-                file_path: '',
-                platform: '',
-                raw_info: null,
-                title: '',
-                video_id: '',
-              },
-            },
-            ...state.tasks,
-          ],
-          currentTaskId: taskId, // 默认设置为当前任务
-        })),
+              ...state.tasks,
+            ],
+            currentTaskId: taskId, // 默认设置为当前任务
+          }
+        }),
 
       updateTaskContent: (id, data) =>
           set(state => ({
@@ -126,19 +154,20 @@ export const useTaskStore = create<TaskStore>()(
                 let updatedMarkdown: Markdown[]
                 if (Array.isArray(prev)) {
                   updatedMarkdown = [newVersion, ...prev]
-                } else {
+                } else if (prev) {
+                  // prev is a non-empty string
                   updatedMarkdown = [
                     newVersion,
-                    ...(typeof prev === 'string' && prev
-                        ? [{
-                          ver_id: `${task.id}-${uuidv4()}`,
-                          content: prev,
-                          style: task.formData.style || '',
-                          model_name: task.formData.model_name || '',
-                          created_at: new Date().toISOString(),
-                        }]
-                        : []),
+                    {
+                      ver_id: `${task.id}-${uuidv4()}`,
+                      content: prev,
+                      style: task.formData.style || '',
+                      model_name: task.formData.model_name || '',
+                      created_at: new Date().toISOString(),
+                    },
                   ]
+                } else {
+                  updatedMarkdown = [newVersion]
                 }
 
                 return {
@@ -200,7 +229,7 @@ export const useTaskStore = create<TaskStore>()(
         if (task) {
           await delete_task({
             video_id: task.audioMeta.video_id,
-            platform: task.platform,
+            platform: task.platform || '',
           })
         }
       },
@@ -208,9 +237,28 @@ export const useTaskStore = create<TaskStore>()(
       clearTasks: () => set({ tasks: [], currentTaskId: null }),
 
       setCurrentTask: taskId => set({ currentTaskId: taskId }),
-    }),
-    {
-      name: 'task-storage',
-    }
-  )
-)
+
+      // Normalize existing task titles: if title is empty or equals the model_name, use filename from formData.video_url without extension
+      normalizeTitles: () =>
+        set(state => ({
+          tasks: state.tasks.map(t => {
+            const curTitle = t.audioMeta?.title || ''
+            if ((curTitle === '' || curTitle === t.formData?.model_name) && t.formData?.video_url) {
+              try {
+                const u = String(t.formData.video_url)
+                let name = u.split('/').pop() || u
+                name = name.replace(/\.[^.]+$/, '')
+                return { ...t, audioMeta: { ...t.audioMeta, title: name } }
+              } catch (e) {
+                return t
+              }
+            }
+            return t
+          }),
+        })),
+     }),
+     {
+       name: 'task-storage',
+     }
+   )
+ )
