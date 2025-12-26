@@ -117,9 +117,6 @@ sudo apt install ffmpeg
 - [x] 加入更多模型支持
 - [x] 加入更多音频转文本模型支持
 
-  
-  <img src="doc/wechat.png" alt="wechat" style="zoom:33%;" />
-
 
 
 ## 🔎代码参考
