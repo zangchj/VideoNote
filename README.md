@@ -117,9 +117,6 @@ sudo apt install ffmpeg
 - [x] 加入更多模型支持
 - [x] 加入更多音频转文本模型支持
 
-### Contact and Join-联系和加入社区
-- BiliNote 交流QQ群：785367111
-- BiliNote 交流微信群:
   
   <img src="doc/wechat.png" alt="wechat" style="zoom:33%;" />
 
@@ -136,11 +133,6 @@ MIT License
 
 💬 你的支持与反馈是我持续优化的动力！欢迎 PR、提 issue、Star ⭐️
 ## Buy Me a Coffee / 捐赠
-如果你觉得项目对你有帮助，考虑支持我一下吧
-<div style='display:inline;'>
-    <img width='30%' src='https://common-1304618721.cos.ap-chengdu.myqcloud.com/8986c9eb29c356a0cfa3d470c23d3b6.jpg'/>
-    <img width='30%' src='https://common-1304618721.cos.ap-chengdu.myqcloud.com/2a049ea298b206bcd0d8b8da3219d6b.jpg'/>
-</div>
 
 ## ⭐ Star History
 
