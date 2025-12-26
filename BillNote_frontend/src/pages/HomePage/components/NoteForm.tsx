@@ -329,8 +329,13 @@ const NoteForm = () => {
 
     // 如果是重试且已有 currentTaskId，则直接触发 retryTask（后端会复用 task_id）
     if (currentTaskId) {
-      retryTask(currentTaskId)
-      toast.success('已重新提交任务')
+      try {
+        retryTask(currentTaskId)
+        toast.success('已重新提交任务')
+      } catch (e) {
+        console.error('Retry task failed', e)
+        toast.error('重新提交任务失败')
+      }
       return
     }
 
@@ -352,11 +357,16 @@ const NoteForm = () => {
         // call backend and let it use the provided task_id
         try {
           console.log('Submitting batch local job', tempId, url)
-          await generateNote(p as any)
+          const res = await generateNote(p as any)
+          console.log('batch submit res', res)
           toast.success('任务已提交，已加入等待队列')
-        } catch (e) {
+        } catch (e: any) {
           console.error('批量任务提交失败', e)
-          toast.error('提交任务失败')
+          // remove the optimistic pending task because backend rejected it
+          try { setTimeout(() => { /* allow UI to show briefly */ }, 100) } catch (ignored) {}
+          toast.error('提交任务失败: ' + (e?.message || '未知错误'))
+          // remove the failed optimistic task from task store if such API exists
+          try { useTaskStore.getState().removeTask?.(tempId) } catch (err) { /* ignore if not available */ }
         }
       }
       toast.success('已为每个本地视频提交任务')
@@ -373,12 +383,16 @@ const NoteForm = () => {
     // optimistic add so right-side shows waiting immediately
     addPendingTask(newTaskId, values.platform, singlePayload)
     try {
-      await generateNote(singlePayload as any)
+      const res = await generateNote(singlePayload as any)
+      console.log('single submit res', res)
+      // if backend returned a non-ok payload with code/msg, ensure we log it
+      if (res && (res.code || res.msg)) console.error('generateNote returned:', res)
       toast.success('任务已提交，已加入等待队列')
-    } catch (e) {
-      toast.error('提交任务失败')
-      // mark task as failed
-      // updateTaskContent not imported here; we can rely on polling to detect failure or user can retry
+    } catch (e: any) {
+      console.error('提交任务失败', e)
+      toast.error('提交任务失败: ' + (e?.message || '未知错误'))
+      // remove optimistic task if submission failed
+      try { useTaskStore.getState().removeTask?.(newTaskId) } catch (err) { /* ignore if not implemented */ }
     }
   }
 

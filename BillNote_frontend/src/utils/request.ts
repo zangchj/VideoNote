@@ -34,10 +34,28 @@ request.interceptors.response.use(
       return Promise.reject(res); // 拒绝Promise，让业务代码可以捕获并处理
     }
   },
-  (error) => {
+  async (error) => {
     // 网络/服务器错误
     const res = error?.response?.data as IResponse | undefined;
-    if (res) {
+
+    // Log full response for debugging when server returns non-JSON or unexpected payload
+    if (error?.response) {
+      try {
+        console.error('HTTP Error response:', {
+          status: error.response.status,
+          headers: error.response.headers,
+          data: error.response.data,
+          url: error.config?.url,
+          method: error.config?.method,
+        })
+      } catch (logErr) {
+        console.error('Failed to log error.response', logErr)
+      }
+    } else {
+      console.error('Network or CORS error (no response):', error)
+    }
+
+    if (res && typeof res === 'object') {
       // 如果后端有返回错误信息，则显示后端信息
       // If the backend returns an error message, display it
 

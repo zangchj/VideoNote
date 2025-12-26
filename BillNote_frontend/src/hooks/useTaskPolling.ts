@@ -6,8 +6,8 @@ export const useTaskPolling = (interval = 3000) => {
   // tasksRef will be updated via subscribe; avoid using useTaskStore hook directly here
   const tasksRef = useRef<any[]>(useTaskStore.getState().tasks || [])
 
-  // Grab a stable reference to the updateTaskContent function via hook once
-  const updateTaskContent = useTaskStore(state => state.updateTaskContent)
+  // Grab a stable reference to the updateTaskContent function via store getter (avoid creating a hook subscription)
+  const updateTaskContent = useRef(useTaskStore.getState().updateTaskContent).current
 
   useEffect(() => {
     // subscribe to tasks changes and update the ref; this avoids useSyncExternalStore/getSnapshot warnings

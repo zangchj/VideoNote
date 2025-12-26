@@ -14,30 +14,52 @@ export const generateNote = async (data: {
   video_understand?: boolean
   video_interval?: number
   grid_size: Array<number>
-}): Promise<any | null> => {
+}): Promise<any> => {
   try {
     console.log('generateNote', data)
+    // NOTE: `request` interceptor usually returns the backend `data` payload (request.ts returns res.data)
+    // but be defensive: handle both the payload shape and the full IResponse shape.
     const response: any = await request.post('/generate_note', data)
 
-    // Defensive checks: ensure we have a response and a data payload
-    if (!response || !response.data) {
+    // Normalize response to payload (the meaningful data part)
+    let payload: any = response
+
+    // If we accidentally received the full wrapper { code, msg, data }, unwrap it
+    if (response && typeof response === 'object' && 'code' in response) {
+      if (response.code === 0) {
+        payload = response.data
+      } else {
+        console.error('generateNote: server returned error wrapper', response)
+        toast.error(response.msg || '服务器返回错误')
+        throw new Error(response.msg || 'Server error')
+      }
+    }
+
+    // At this point payload should be the backend data object (e.g. { task_id: '...' })
+    if (!payload) {
+      console.error('generateNote: invalid response payload from server', response)
       toast.error('请求失败，未收到有效响应')
-      return null
+      throw new Error('No response data')
     }
 
-    // If backend returns an error message in data.msg, show it and bail
-    if (response.data.msg) {
-      toast.error(response.data.msg)
-      return null
+    // If payload contains an error-like structure, surface it
+    if (payload && (payload.msg || payload.error)) {
+      console.error('generateNote: payload indicates error', payload)
+      toast.error(payload.msg || payload.error || '服务器返回错误')
+      throw new Error(payload.msg || payload.error || 'Server error')
     }
 
+    // success
     toast.success('笔记生成任务已提交！')
-
-    console.log('res', response)
-    return response
+    console.log('generateNote result payload:', payload)
+    return payload
   } catch (e: any) {
-    console.error('❌ 请求出错', e)
-    // Allow caller to handle error details
+    // request.ts interceptor already shows a toast for network/backend errors. Add logging and rethrow
+    console.error('❌ generateNote 请求出错', e)
+    // If the thrown object contains a user-friendly msg, show it
+    if (e && e.msg) {
+      toast.error(e.msg)
+    }
     throw e
   }
 }
