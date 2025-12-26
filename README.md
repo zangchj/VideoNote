@@ -1,22 +1,4 @@
-<div style="display: flex; justify-content: center; align-items: center; gap: 10px;
-">
-    <p align="center">
-  <img src="./doc/icon.svg" alt="BiliNote Banner" width="50" height="50"  />
-</p>
-<h1 align="center" > BiliNote v1.8.1</h1>
-</div>
-
 <p align="center"><i>AI 视频笔记生成工具 让 AI 为你的视频做笔记</i></p>
-
-<p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-blue.svg" />
-  <img src="https://img.shields.io/badge/frontend-react-blue" />
-  <img src="https://img.shields.io/badge/backend-fastapi-green" />
-  <img src="https://img.shields.io/badge/GPT-openai%20%7C%20deepseek%20%7C%20qwen-ff69b4" />
-  <img src="https://img.shields.io/badge/docker-compose-blue" />
-  <img src="https://img.shields.io/badge/status-active-success" />
-  <img src="https://img.shields.io/github/stars/jefferyhcool/BiliNote?style=social" />
-</p>
 
 
 
