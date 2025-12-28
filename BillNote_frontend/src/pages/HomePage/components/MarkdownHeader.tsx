@@ -36,6 +36,18 @@ interface NoteHeaderProps {
   setViewMode: (m: 'map' | 'preview') => void
 }
 
+function sanitizeExportBaseName(name = '') {
+  // allow Unicode letters (including Chinese), keep numbers, whitespace, dash, dot and underscore
+  // remove characters forbidden in filenames on Windows
+  return name
+    .replace(/[<>:"\\|?*]/g, '_') // remove forbidden chars
+    .replace(/\//g, '_') // replace forward slashes
+    .replace(/\s+/g, '_')
+    .replace(/__+/g, '_')
+    .trim()
+    .slice(0, 120)
+}
+
 export function MarkdownHeader(props: NoteHeaderProps) {
   const {
     currentTask,
@@ -84,6 +96,24 @@ export function MarkdownHeader(props: NoteHeaderProps) {
       .replace(/\//g, '-')
   }
 
+  // helper to derive a friendly export base name from available info
+  const deriveExportBaseName = (): string => {
+    // prefer audioMeta.title
+    if (currentTask?.audioMeta?.title) return String(currentTask.audioMeta.title)
+    // if markdown is a string, take first 40 chars
+    if (typeof currentTask?.markdown === 'string') return (currentTask.markdown as string).slice(0, 40)
+    // if markdown is array, try to extract content field or first string entry
+    if (Array.isArray(currentTask?.markdown) && currentTask.markdown.length > 0) {
+      const first: any = currentTask.markdown[0]
+      if (typeof first === 'string') return String(first).slice(0, 40)
+      if (first && typeof first === 'object') {
+        const c = (first.content || first.markdown || first.title || '') as string
+        return String(c).slice(0, 40)
+      }
+    }
+    return currentVerId || 'note'
+  }
+
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b bg-white/95 px-4 py-2 backdrop-blur-sm">
       {/* 左侧区域：版本 + 标签 + 创建时间 */}
@@ -102,7 +132,7 @@ export function MarkdownHeader(props: NoteHeaderProps) {
             </SelectTrigger>
 
             <SelectContent>
-              {(Array.isArray(currentTask?.markdown) ? currentTask!.markdown : []).map((v: VersionNote, idx: number) => {
+              {(Array.isArray(currentTask?.markdown) ? currentTask!.markdown : []).map((v: VersionNote) => {
                 const shortId = v.ver_id.slice(-6)
                 return (
                   <SelectItem key={v.ver_id} value={v.ver_id}>
@@ -168,23 +198,28 @@ export function MarkdownHeader(props: NoteHeaderProps) {
                    if (!currentTask) markdownContent = ''
                    else if (typeof currentTask.markdown === 'string') markdownContent = currentTask.markdown
                    else if (Array.isArray(currentTask.markdown) && currentTask.markdown.length>0) {
-                     const first = currentTask.markdown[0] as any
+                     const first = currentTask.markdown[0]
                      if (typeof first === 'string') markdownContent = first
-                     else markdownContent = first.content || first.markdown || ''
+                     else if (first && typeof first === 'object') {
+                       // first is likely VersionNote
+                       const f = first as VersionNote
+                       markdownContent = f.content || (f as any).markdown || ''
+                     }
                    }
 
                   // ensure relative image URLs that start with /static are converted to backend absolute URLs
                   const rawApi = String(import.meta.env.VITE_API_BASE_URL || '')
                   const apiBase = rawApi ? rawApi.replace(/\/api\/?$/, '').replace(/\/$/, '') : ''
 
-                  // Replace markdown image links that start with a leading slash (e.g. /static/...) to point to backend
-                  // Keep a closing parenthesis to ensure regex used later can match
-                  const fixedMarkdown = markdownContent.replace(/!\[([^\]]*)\]\((\/[^)]+)\)/g, (_m, alt, path) => {
-                    if (!apiBase) return `![${alt}](${path})`
-                    return `![${alt}](${apiBase}${path})`
-                  })
 
-                  await exportMarkdownWithImages(fixedMarkdown, { includeImages: true, proxyUrl: '/api/proxy-image' })
+                  // compute a friendly filename base
+                  const title = deriveExportBaseName()
+                  const safe = sanitizeExportBaseName(String(title))
+                  const outFilename = `${(safe && safe.length>0) ? safe : 'note'}.zip`
+
+                  // For export, use the original markdownContent so image URLs match files/paths in backend/static and the exporter can fetch them (it will call proxy when needed)
+
+                  await exportMarkdownWithImages(markdownContent, { includeImages: true, proxyUrl: '/api/proxy-image', filename: outFilename })
                  }catch(e){
                    console.error('导出失败', e)
                  }

@@ -4,13 +4,19 @@ import httpx
 from urllib.parse import unquote, urlparse
 import re
 import os
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 IMAGE_EXT_RE = re.compile(r"^(.*?\.(?:jpg|jpeg|png|gif|webp|svg))(?:[\?#].*)?$", re.IGNORECASE)
 
 # allow typical local hostnames to be served from backend static folder
 LOCAL_HOSTNAMES = {"localhost", "127.0.0.1"}
+
+# base directory for safely serving local static files (project root)
+PROJECT_ROOT = os.path.abspath(os.getcwd())
+STATIC_DIR = os.path.join(PROJECT_ROOT, 'static')
 
 @router.get('/proxy-image')
 async def proxy_image(url: str = Query(...)):
@@ -28,23 +34,36 @@ async def proxy_image(url: str = Query(...)):
     if m:
         clean_url = m.group(1)
     else:
-        # fallback: remove trailing runs of dashes and non-url characters
-        clean_url = re.sub(r"[-]{3,}.*$", "", raw)
+        # fallback: remove trailing runs of dashes, asterisks and URL-encoded sequences
+        clean_url = re.sub(r"(?:%2A|%2a|\*|\s)+[-]{2,}.*$", "", raw)
+        clean_url = re.sub(r"[-*_]{2,}.*$", "", clean_url)
 
+    clean_url = clean_url.strip()
+    logger.debug("proxy-image received raw=%s clean=%s", raw, clean_url)
+
+    # attempt to parse
     parsed = urlparse(clean_url)
 
-    # If URL is relative (no scheme), reject; but if it's a localhost path like '/static/..', attempt to serve from backend static folder
+    # If URL is relative (no scheme), attempt to serve as a local static file path
     if not parsed.scheme:
-        # treat as local path
         path = clean_url
+        # normalize leading slash
         if path.startswith('/'):
-            # Map to backend project working directory
-            local_path = os.path.abspath(path.lstrip('/'))
+            # map to project static folder if path begins with /static/
+            if path.startswith('/static/'):
+                candidate = os.path.normpath(os.path.join(PROJECT_ROOT, path.lstrip('/')))
+            else:
+                candidate = os.path.normpath(os.path.join(PROJECT_ROOT, path.lstrip('/')))
         else:
-            local_path = os.path.abspath(path)
-        if os.path.exists(local_path) and os.path.isfile(local_path):
-            return FileResponse(local_path, media_type=None, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"})
-        raise HTTPException(status_code=400, detail="Invalid URL or local file not found")
+            candidate = os.path.normpath(os.path.join(PROJECT_ROOT, path))
+
+        # security: ensure candidate is inside project root
+        if not candidate.startswith(PROJECT_ROOT):
+            raise HTTPException(status_code=400, detail="Invalid local path")
+
+        if os.path.exists(candidate) and os.path.isfile(candidate):
+            return FileResponse(candidate, media_type=None, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"})
+        raise HTTPException(status_code=404, detail="Local file not found")
 
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(status_code=400, detail="Invalid URL scheme")
@@ -52,9 +71,8 @@ async def proxy_image(url: str = Query(...)):
     # If the request targets localhost static and we can map it to backend static directory, serve directly.
     hostname = parsed.hostname or ''
     if hostname in LOCAL_HOSTNAMES and parsed.path.startswith('/static/'):
-        # Map to backend's static directory (assumes working directory contains 'static' folder)
-        candidate = os.path.abspath(os.path.join(os.getcwd(), parsed.path.lstrip('/')))
-        if os.path.exists(candidate) and os.path.isfile(candidate):
+        candidate = os.path.normpath(os.path.join(PROJECT_ROOT, parsed.path.lstrip('/')))
+        if candidate.startswith(STATIC_DIR) and os.path.exists(candidate) and os.path.isfile(candidate):
             return FileResponse(candidate, media_type=None, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"})
 
     headers = {
@@ -63,7 +81,7 @@ async def proxy_image(url: str = Query(...)):
     }
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(clean_url, headers=headers)
             resp.raise_for_status()
 
@@ -72,8 +90,10 @@ async def proxy_image(url: str = Query(...)):
             response_headers = {"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}
             return Response(content=resp.content, media_type=content_type, headers=response_headers)
     except httpx.HTTPStatusError as e:
+        logger.exception('Upstream status error fetching %s', clean_url)
         # upstream returned non-2xx
         raise HTTPException(status_code=502, detail=f"Upstream status {e.response.status_code}")
     except Exception as e:
+        logger.exception('Network or other error fetching %s', clean_url)
         # network error, DNS, invalid URL, timeout, etc.
         raise HTTPException(status_code=502, detail=str(e))
