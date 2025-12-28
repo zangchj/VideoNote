@@ -6,17 +6,21 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
+import { exportMarkdownWithImages } from '@/utils/exportMarkdown'
 
 interface VersionNote {
   ver_id: string
   model_name?: string
   style?: string
   created_at?: string
+  // content may exist on version objects
+  content?: string
 }
 
 interface NoteHeaderProps {
   currentTask?: {
     markdown: VersionNote[] | string
+    audioMeta?: { title?: string }
   }
   isMultiVersion: boolean
   currentVerId: string
@@ -25,27 +29,29 @@ interface NoteHeaderProps {
   style: string
   noteStyles: { value: string; label: string }[]
   onCopy: () => void
-  onDownload: () => void
   createAt?: string | Date
   setShowTranscribe: (show: boolean) => void
+  showTranscribe?: boolean
+  viewMode: 'map' | 'preview'
+  setViewMode: (m: 'map' | 'preview') => void
 }
 
-export function MarkdownHeader({
-  currentTask,
-  isMultiVersion,
-  currentVerId,
-  setCurrentVerId,
-  modelName,
-  style,
-  noteStyles,
-  onCopy,
-  onDownload,
-  createAt,
-  showTranscribe,
-  setShowTranscribe,
-  viewMode,
-  setViewMode,
-}: NoteHeaderProps) {
+export function MarkdownHeader(props: NoteHeaderProps) {
+  const {
+    currentTask,
+    isMultiVersion,
+    currentVerId,
+    setCurrentVerId,
+    modelName,
+    style,
+    noteStyles,
+    onCopy,
+    createAt,
+    showTranscribe,
+    setShowTranscribe,
+    viewMode,
+    setViewMode,
+  } = props
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -62,10 +68,6 @@ export function MarkdownHeader({
   }
 
   const styleName = noteStyles.find(v => v.value === style)?.label || style
-
-  const reversedMarkdown: VersionNote[] = Array.isArray(currentTask?.markdown)
-    ? [...currentTask!.markdown].reverse()
-    : []
 
   const formatDate = (date: string | Date | undefined) => {
     if (!date) return ''
@@ -91,14 +93,16 @@ export function MarkdownHeader({
             <SelectTrigger className="h-8 w-[160px] text-sm">
               <div className="flex items-center">
                 {(() => {
-                  const idx = currentTask?.markdown.findIndex(v => v.ver_id === currentVerId)
+                  const idx = Array.isArray(currentTask?.markdown)
+                    ? currentTask!.markdown.findIndex((v: VersionNote) => v.ver_id === currentVerId)
+                    : -1
                   return idx !== -1 ? `版本（${currentVerId.slice(-6)}）` : ''
                 })()}
               </div>
             </SelectTrigger>
 
             <SelectContent>
-              {(currentTask?.markdown || []).map((v, idx) => {
+              {(Array.isArray(currentTask?.markdown) ? currentTask!.markdown : []).map((v: VersionNote, idx: number) => {
                 const shortId = v.ver_id.slice(-6)
                 return (
                   <SelectItem key={v.ver_id} value={v.ver_id}>
@@ -157,12 +161,39 @@ export function MarkdownHeader({
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button onClick={onDownload} variant="ghost" size="sm" className="h-8 px-2">
+              <Button onClick={async() => {
+                 try{
+                   // extract markdown safely
+                   let markdownContent = ''
+                   if (!currentTask) markdownContent = ''
+                   else if (typeof currentTask.markdown === 'string') markdownContent = currentTask.markdown
+                   else if (Array.isArray(currentTask.markdown) && currentTask.markdown.length>0) {
+                     const first = currentTask.markdown[0] as any
+                     if (typeof first === 'string') markdownContent = first
+                     else markdownContent = first.content || first.markdown || ''
+                   }
+
+                  // ensure relative image URLs that start with /static are converted to backend absolute URLs
+                  const rawApi = String(import.meta.env.VITE_API_BASE_URL || '')
+                  const apiBase = rawApi ? rawApi.replace(/\/api\/?$/, '').replace(/\/$/, '') : ''
+
+                  // Replace markdown image links that start with a leading slash (e.g. /static/...) to point to backend
+                  // Keep a closing parenthesis to ensure regex used later can match
+                  const fixedMarkdown = markdownContent.replace(/!\[([^\]]*)\]\((\/[^)]+)\)/g, (_m, alt, path) => {
+                    if (!apiBase) return `![${alt}](${path})`
+                    return `![${alt}](${apiBase}${path})`
+                  })
+
+                  await exportMarkdownWithImages(fixedMarkdown, { includeImages: true, proxyUrl: '/api/proxy-image' })
+                 }catch(e){
+                   console.error('导出失败', e)
+                 }
+               }} variant="ghost" size="sm" className="h-8 px-2">
                 <Download className="mr-1.5 h-4 w-4" />
                 <span className="text-sm">导出 Markdown</span>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>下载为 Markdown 文件</TooltipContent>
+            <TooltipContent>下载为 Markdown 文件（包含图片）</TooltipContent>
           </Tooltip>
         </TooltipProvider>
         <TooltipProvider>

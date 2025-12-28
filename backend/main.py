@@ -2,10 +2,11 @@ import os
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 from dotenv import load_dotenv
+from fastapi.responses import FileResponse
 
 from app.db.init_db import init_db
 from app.db.provider_dao import seed_default_providers
@@ -59,11 +60,86 @@ app.add_middleware(
     allow_headers=["*"],
 )
 register_exception_handlers(app)
-app.mount(static_path, StaticFiles(directory=static_dir), name="static")
+
+# Middleware to sanitize incoming path to avoid Windows invalid filename errors before routing
+@app.middleware("http")
+async def sanitize_path_middleware(request, call_next):
+    from urllib.parse import unquote
+    import re
+    path = request.scope.get("path", "")
+    # Only sanitize when path begins with configured static prefix
+    prefix = static_path.rstrip('/') + '/'
+    if path.startswith(prefix):
+        # decode only the portion after the prefix
+        p = path[len(prefix):]
+        try:
+            p = unquote(p)
+        except Exception:
+            pass
+        # strip common junk suffixes like '*---' and any appended markdown anchors after image names
+        if p.endswith('*---'):
+            p = p[:-4]
+        # strip repeated trailing dashes '---' or appended fragments starting with '---'
+        p = re.sub(r'---.*$', '', p)
+        # Remove stray asterisks
+        p = p.rstrip('*')
+        # Normalize path
+        norm = os.path.normpath(p).lstrip(os.sep)
+        parts = []
+        for part in norm.split(os.sep):
+            clean = re.sub(r'[<>:\\"/\|\?\*]', '', part)
+            clean = re.sub(r'[\.\s]+$', '', clean)
+            if clean:
+                parts.append(clean)
+        new_norm = "/".join(parts)
+        new_path = static_path.rstrip('/') + '/' + new_norm
+        logger.debug(f"Sanitized static request path from '{path}' to '{new_path}'")
+        # update scope.path and raw_path (raw_path must be bytes)
+        request.scope['path'] = new_path
+        request.scope['raw_path'] = new_path.encode('utf-8')
+    response = await call_next(request)
+    return response
+
+# Safe static route: sanitize incoming path to remove invalid trailing suffixes (e.g. '*---')
+# This prevents WinError 123 when requests include characters invalid in Windows filenames.
+@app.get(f"{static_path}/{{full_path:path}}")
+async def safe_static(full_path: str):
+    import urllib.parse
+    import re
+    # URL-decode
+    p = urllib.parse.unquote(full_path)
+    # Strip common trailing junk that some clients append (like '*---' seen in logs)
+    if p.endswith('*---'):
+        p = p[:-4]
+    # Trim any markdown anchor or trailing '---' fragments
+    p = re.sub(r'---.*$', '', p)
+    # Remove stray asterisks
+    p = p.rstrip('*')
+    # Normalize path to prevent path traversal
+    norm = os.path.normpath(p).lstrip(os.sep)
+    # Sanitize each path segment to remove characters invalid on Windows
+    parts = []
+    for part in norm.split(os.sep):
+        # remove characters <>:"/\\|?* and control chars
+        clean = re.sub(r'[<>:\\"/\|\?\*]', '', part)
+        # trim trailing dots and spaces which are invalid on Windows filenames
+        clean = re.sub(r'[\.\s]+$', '', clean)
+        if clean:
+            parts.append(clean)
+    norm = os.sep.join(parts)
+    target = os.path.join(static_dir, norm)
+    # Ensure target is still within static_dir
+    abs_static = os.path.abspath(static_dir)
+    abs_target = os.path.abspath(target)
+    if not abs_target.startswith(abs_static):
+        raise HTTPException(status_code=404)
+    if not os.path.exists(abs_target) or not os.path.isfile(abs_target):
+        raise HTTPException(status_code=404)
+    return FileResponse(abs_target)
+
+# Mount uploads normally, but avoid mounting the same static_path to prevent duplicate handling.
+# We already expose a safe_static route for static files; only mount uploads here.
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
-
-
-
 
 
 

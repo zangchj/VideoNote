@@ -4,6 +4,7 @@
 - 本项目中的 `抖音下载功能` 部分代码参考引用自：[Evil0ctal/Douyin_TikTok_Download_API](https://github.com/Evil0ctal/Douyin_TikTok_Download_API)
 - 本项目中代码参考 https://github.com/JefferyHcool/BiliNote
 - 新增本地视频支持多选
+- 修改下载markdown笔记时，图片无法下载的问题
 
 ## ✨ 项目简介
 
